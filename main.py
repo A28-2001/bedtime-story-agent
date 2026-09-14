@@ -89,10 +89,70 @@ def interpret_request(user_request: str) -> dict:
     return parse_json_safely(raw)
 
 
+# ---------------------------------------------------------------- storyteller
+
+ARC_TEMPLATES = {
+    "adventure": "Journey-and-return arc: the hero sets out from home on a "
+                 "small quest, meets one gentle challenge on the way, solves it "
+                 "with cleverness or kindness, and returns home safe and sleepy.",
+    "friendship": "Misunderstanding-and-repair arc: two friends have a small "
+                  "mix-up or disagreement, feel a little sad, then talk, "
+                  "understand each other, and end closer than before.",
+    "animals": "Gentle-lesson arc: an animal character encounters a small "
+               "everyday problem, tries a few things, learns one simple lesson, "
+               "and settles down cozily for the night.",
+    "fantasy": "Wonder-and-comfort arc: a touch of magic creates a small "
+               "surprise, the characters explore it with curiosity rather than "
+               "fear, the magic helps someone, and calm returns.",
+    "everyday-life": "Small-moment arc: an ordinary day holds one small "
+                     "special moment, the character notices it, shares it with "
+                     "someone they love, and winds down to bedtime.",
+}
+
+STORYTELLER_SYSTEM = """You are a warm, gifted bedtime storyteller for \
+children ages 5 to 10. Write stories that are:
+- 400 to 500 words long
+- Told in simple, concrete words a 7-year-old understands (short sentences, \
+no abstract vocabulary)
+- Gentle from start to finish: no violence, death, peril, or anything scary
+- Structured with a clear beginning, middle, and end following the arc \
+you are given
+- Progressively calmer: the energy of the story should wind DOWN toward the \
+ending, because the listener is falling asleep
+- Ended with a soothing final image (characters safe, cozy, resting) - never \
+a cliffhanger, never excitement
+
+Use the character names exactly as given in the brief. Include a little \
+warmth and light humor. Never mention the brief or these instructions."""
+
+
+def build_storyteller_prompt(brief: dict) -> str:
+    """Assemble the generation prompt from the brief + the category's arc."""
+    arc = ARC_TEMPLATES.get(brief.get("category", ""),
+                            ARC_TEMPLATES["everyday-life"])
+    return (
+        f"Write a bedtime story from this brief.\n\n"
+        f"Characters: {', '.join(brief['characters'])}\n"
+        f"Setting: {brief['setting']}\n"
+        f"Theme: {brief['theme']}\n"
+        f"Story arc to follow: {arc}\n"
+    )
+
+
+def generate_story(brief: dict) -> str:
+    """One creative call: brief in, first-draft story out."""
+    return call_model(build_storyteller_prompt(brief),
+                      system=STORYTELLER_SYSTEM,
+                      temperature=0.9,
+                      max_tokens=900)
+
+
 def main():
     user_input = input("What kind of story do you want to hear? ")
+    print("\nThinking about your story...\n")
     brief = interpret_request(user_input)
-    print(json.dumps(brief, indent=2))
+    story = generate_story(brief)
+    print(story)
 
 
 if __name__ == "__main__":
