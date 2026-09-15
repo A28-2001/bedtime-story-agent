@@ -46,6 +46,10 @@ flowchart TD
 One model, gpt-3.5-turbo (fixed by the assignment), plays every role. The
 components differ only in system prompt, temperature, and output contract.
 
+A full three-round transcript (draft, judge scores, revision notes, improved
+draft, and the best-draft decision) is in [sample_output.md](sample_output.md),
+regenerable with `python make_sample.py`.
+
 | Component | Temperature | Why |
 |---|---|---|
 | Interpreter | 0.2 | Extraction and classification should be deterministic |
