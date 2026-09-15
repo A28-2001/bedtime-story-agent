@@ -24,17 +24,23 @@ language ("add a puppy named Max"), or press Enter to finish.
 
 ```mermaid
 flowchart TD
-    U[User request] --> I[Interpreter\ntemp 0.2\ncategorize + extract + soften]
-    I -->|story brief JSON| S[Storyteller\ntemp 0.9\ncategory arc + mode]
-    S -->|draft| J[Judge\ntemp 0.1\n5-dimension rubric JSON]
-    J -->|all scores >= 8| OUT[Story shown to user]
-    J -->|revision notes| R[Reviser\ntemp 0.7\napply notes, keep what works]
-    R -->|new draft, max 2 rounds| J
-    J -.->|every draft scored| B[Best-draft selection\nships argmax, not last]
+    subgraph STAGE1[1. Understand the request]
+        U[User request] --> I[Interpreter\ntemp 0.2\ncategorize + extract + soften]
+    end
+    subgraph STAGE2[2. Write and quality-check]
+        S[Storyteller\ntemp 0.9\ncategory arc + mode] -->|draft| J[Judge\ntemp 0.1\n5-dimension rubric]
+        J -->|revision notes| R[Reviser\ntemp 0.7\napply notes, keep what works]
+        R -->|new draft, max 2 rounds| J
+        J -.->|every draft scored| B[Best-draft selection\nships argmax, not last]
+    end
+    subgraph STAGE3[3. Interactive session]
+        OUT[Story shown to user] --> F{User feedback?}
+        F -->|change request| R2[Reviser\nfeedback as notes] --> J2[Judge re-check] --> OUT
+        F -->|Enter| END[Sweet dreams]
+    end
+    I -->|story brief JSON| S
+    J -->|all scores >= 8| OUT
     B --> OUT
-    OUT --> F{User feedback?}
-    F -->|"change request"| R2[Reviser\nfeedback as notes] --> J2[Judge re-check] --> OUT
-    F -->|Enter| END[Sweet dreams]
 ```
 
 One model, gpt-3.5-turbo (fixed by the assignment), plays every role. The
