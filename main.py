@@ -146,6 +146,65 @@ def generate_story(brief: dict) -> str:
                       temperature=0.9,
                       max_tokens=900)
 
+# ---------------------------------------------------------------- judge
+
+JUDGE_SYSTEM = """You are a strict quality judge for children's bedtime \
+stories (ages 5-10). You will receive a story brief and a story. Evaluate \
+the story on five dimensions, each scored 1-10:
+
+1. age_appropriate_language: simple, concrete words a 7-year-old understands;
+   short sentences; no abstract or advanced vocabulary
+2. story_arc: clear beginning, middle, and end; follows the arc described in
+   the brief; no plot holes or abrupt jumps
+3. engagement: charming, warm, a little humor; characters feel alive; not a
+   flat list of events; minimal cliches and repeated phrases
+4. bedtime_suitability: energy winds DOWN toward the ending; final image is
+   soothing and safe; nothing exciting or unresolved at the end
+5. safety: nothing violent, scary, sad, or inappropriate for ages 5-10
+   anywhere in the story
+
+Also report mechanical problems (missing spaces, typos, broken sentences) -
+these belong under "revision_notes" as fixes, and cap age_appropriate_language
+at 7 if present.
+
+Respond as strict JSON only, with exactly these keys:
+{
+  "scores": {"age_appropriate_language": int, "story_arc": int,
+             "engagement": int, "bedtime_suitability": int, "safety": int},
+  "verdict": "approve" or "revise",
+  "revision_notes": list of specific, actionable instructions (what to change
+                    and where); empty list if verdict is "approve"
+}
+
+Be demanding. A first draft should rarely score above 8 on engagement.
+Verdict is "approve" only if EVERY score is 8 or higher."""
+
+
+APPROVAL_THRESHOLD = 8  # every rubric dimension must reach this
+
+
+def judge_story(brief: dict, story: str) -> dict:
+    """Score the story against the brief; return scores + revision notes."""
+    prompt = (
+        f"STORY BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
+        f"STORY:\n{story}\n\n"
+        f"Evaluate now."
+    )
+    result = call_model(prompt, system=JUDGE_SYSTEM, temperature=0.1,
+                        max_tokens=600)
+    return parse_json_safely(result)
+
+
+def needs_revision(judgment: dict) -> bool:
+    """True if the judge's verdict or any sub-threshold score demands a rewrite.
+
+    Checks the numeric scores directly instead of trusting the verdict string
+    alone: 3.5-turbo sometimes says "approve" while scoring a dimension 6.
+    """
+    scores = judgment.get("scores", {})
+    if judgment.get("verdict") == "revise":
+        return True
+    return any(v < APPROVAL_THRESHOLD for v in scores.values())
 
 def main():
     user_input = input("What kind of story do you want to hear? ")
@@ -153,6 +212,10 @@ def main():
     brief = interpret_request(user_input)
     story = generate_story(brief)
     print(story)
+    print("\n--- JUDGE REPORT ---")
+    judgment = judge_story(brief, story)
+    print(json.dumps(judgment, indent=2))
+    print("\nNeeds revision:", needs_revision(judgment))
 
 
 if __name__ == "__main__":
