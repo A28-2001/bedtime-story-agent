@@ -5,6 +5,11 @@ the category sweep described in the README); these tests cover the
 deterministic logic the pipeline's control flow depends on.
 """
 import json
+import os
+
+# Tests make no API calls; this only satisfies OpenAI client construction
+# when main.py is imported on a machine without a real key configured.
+os.environ.setdefault("OPENAI_API_KEY", "test-key-not-used")
 
 import pytest
 
