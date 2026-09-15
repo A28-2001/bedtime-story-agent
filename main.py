@@ -9,7 +9,18 @@ from openai import OpenAI
 Before submitting the assignment, describe here in a few sentences what you
 would have built next if you spent 2 more hours on this project:
 
-(TODO: fill in before submitting)
+1. Story memory: persist each story's characters to a local JSON file so a
+   child can ask for "another story about Fluffy" and sequels inherit
+   established characters. Touches only the brief-construction step.
+2. Mode-aware judging: condition the bedtime_suitability rubric on the
+   sleepy/storytime mode, after collecting per-mode score baselines so the
+   rubric change is driven by data.
+3. Deterministic text cleanup: a non-LLM post-processing pass for the
+   missing-space artifacts gpt-3.5-turbo produces, cheaper and more
+   reliable than asking the model to proofread itself.
+4. A small evaluation harness: run a fixed suite of requests N times and
+   report score distributions per pipeline stage, turning "the judge
+   improves stories" from an anecdote into a measured claim.
 """
 
 MODEL = "gpt-3.5-turbo"  # fixed by the assignment rules; do not change
