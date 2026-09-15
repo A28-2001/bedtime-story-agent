@@ -16,6 +16,12 @@ export OPENAI_API_KEY="sk-..."    # your own key; never committed
 python main.py
 ```
 
+Run the unit tests (pure functions only; no API calls, no key needed):
+
+```bash
+python -m pytest test_pipeline.py -v
+```
+
 You will be asked for a story request and whether the story is for winding
 down to sleep. After the story prints, you can request changes in plain
 language ("add a puppy named Max"), or press Enter to finish.
@@ -91,6 +97,21 @@ source and logs each change; (2) the storyteller's system prompt forbids
 violence, peril, and scary content; (3) the judge scores safety on every
 draft, including feedback-driven ones, and gates release. Layers 1-2 are
 probabilistic and occasionally leak; layer 3 exists to catch what they miss.
+
+## Why these features
+
+The feature set follows from asking who actually uses this. The real user is
+a parent at 8:30pm, so the mode dial exists: sometimes the goal is sleep,
+sometimes it is just a story. The listener is a child, so the feedback loop
+is deliberately constrained: requests are honored inside the safe zone and
+re-judged before display, which is why "make it scarier with monsters" comes
+back gentler, not scarier. And because rewrites are samples rather than
+guaranteed improvements, the pipeline ships the best judged draft it has
+seen, not the most recent one. Testing splits along the same line: the
+deterministic control logic has unit tests; the probabilistic LLM stages are
+covered by scenario testing (a fixed clean/adversarial pair during
+development, a full category sweep before submission, and the transcript in
+sample_output.md).
 
 ## Known limitations
 
