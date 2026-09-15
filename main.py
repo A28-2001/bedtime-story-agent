@@ -206,16 +206,84 @@ def needs_revision(judgment: dict) -> bool:
         return True
     return any(v < APPROVAL_THRESHOLD for v in scores.values())
 
+# ---------------------------------------------------------------- revision loop
+
+MAX_REVISIONS = 2  # hard cap: cost control + diminishing returns after 2 passes
+
+REVISER_SYSTEM = STORYTELLER_SYSTEM + """
+
+You will receive a story you already wrote, plus specific revision notes from
+an editor. Rewrite the story, applying every note while keeping everything
+that already works: same characters, same plot skeleton, same cozy ending.
+Also silently fix any typos, missing spaces, or broken sentences you notice.
+Return only the revised story text.
+Keep the story between 400 and 500 words - simplify the language, never shorten the story."""
+
+
+def revise_story(brief: dict, story: str, revision_notes: list) -> str:
+    """One rewrite pass: story + judge notes in, improved story out."""
+    notes = "\n".join(f"- {n}" for n in revision_notes)
+    prompt = (
+        f"ORIGINAL BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
+        f"CURRENT STORY:\n{story}\n\n"
+        f"REVISION NOTES:\n{notes}\n\n"
+        f"Rewrite the story now."
+    )
+    return call_model(prompt, system=REVISER_SYSTEM, temperature=0.7,
+                      max_tokens=900)
+
+def draft_quality(judgment: dict) -> tuple:
+    """Sortable quality: worst dimension first, then total. Higher is better."""
+    scores = judgment.get("scores", {})
+    if not scores:
+        return (0, 0)
+    return (min(scores.values()), sum(scores.values()))
+
+def create_story(user_request: str, verbose: bool = True) -> dict:
+    """Full pipeline: request -> brief -> draft -> judge -> revise (<=2x).
+
+    Returns a dict with the final story plus the full history for transparency:
+    every draft, every judge report, and how many revisions ran.
+    """
+    log = lambda msg: print(msg) if verbose else None
+
+    log("\nUnderstanding your request...")
+    brief = interpret_request(user_request)
+    if brief.get("adjustments"):
+        log("(Gently adjusted: " + "; ".join(brief["adjustments"]) + ")")
+
+    log("Writing your story...")
+    story = generate_story(brief)
+    history = []
+    best_story, best_judgment = None, None
+
+    for round_num in range(MAX_REVISIONS + 1):
+        log(f"Checking story quality (round {round_num + 1})...")
+        judgment = judge_story(brief, story)
+        history.append({"draft": story, "judgment": judgment})
+        if best_judgment is None or draft_quality(judgment) > draft_quality(best_judgment):
+            best_story, best_judgment = story, judgment
+        if not needs_revision(judgment):
+            break
+        if round_num == MAX_REVISIONS:
+            break  # cap reached: ship the best draft seen, not the last one
+        log("Making it even better...")
+        story = revise_story(brief, story,
+                             judgment.get("revision_notes", []))
+
+    return {"story": best_story, "brief": brief, "history": history,
+            "revisions_used": len(history) - 1}
+
 def main():
     user_input = input("What kind of story do you want to hear? ")
-    print("\nThinking about your story...\n")
-    brief = interpret_request(user_input)
-    story = generate_story(brief)
-    print(story)
-    print("\n--- JUDGE REPORT ---")
-    judgment = judge_story(brief, story)
-    print(json.dumps(judgment, indent=2))
-    print("\nNeeds revision:", needs_revision(judgment))
+    result = create_story(user_input)
+    print("\n" + "=" * 60 + "\n")
+    print(result["story"])
+    print("\n" + "=" * 60)
+    print(f"\nRevisions used: {result['revisions_used']}")
+    for i, entry in enumerate(result["history"]):
+        scores = entry["judgment"].get("scores", {})
+        print(f"Round {i + 1} scores: {scores}")
 
 
 if __name__ == "__main__":
