@@ -125,9 +125,19 @@ a cliffhanger, never excitement
 Use the character names exactly as given in the brief. Include a little \
 warmth and light humor. Never mention the brief or these instructions."""
 
+STORY_MODES = {
+    "sleepy": "MODE: Wind-down story. Make the final third of the story "
+              "progressively quieter and slower. Sentences in the last two "
+              "paragraphs should be short and soft, like a lullaby in prose. "
+              "End with the characters falling asleep.",
+    "storytime": "MODE: Story-time story. Keep the gentle, cozy ending, but "
+                 "the energy can stay a little brighter - end with a warm "
+                 "smile rather than falling asleep.",
+}
 
-def build_storyteller_prompt(brief: dict) -> str:
-    """Assemble the generation prompt from the brief + the category's arc."""
+
+def build_storyteller_prompt(brief: dict, mode: str = "sleepy") -> str:
+    """Assemble the generation prompt from the brief + arc + story mode."""
     arc = ARC_TEMPLATES.get(brief.get("category", ""),
                             ARC_TEMPLATES["everyday-life"])
     return (
@@ -136,12 +146,13 @@ def build_storyteller_prompt(brief: dict) -> str:
         f"Setting: {brief['setting']}\n"
         f"Theme: {brief['theme']}\n"
         f"Story arc to follow: {arc}\n"
+        f"{STORY_MODES.get(mode, STORY_MODES['sleepy'])}\n"
     )
 
 
-def generate_story(brief: dict) -> str:
+def generate_story(brief: dict, mode: str = "sleepy") -> str:
     """One creative call: brief in, first-draft story out."""
-    return call_model(build_storyteller_prompt(brief),
+    return call_model(build_storyteller_prompt(brief, mode),
                       system=STORYTELLER_SYSTEM,
                       temperature=0.9,
                       max_tokens=900)
@@ -220,13 +231,15 @@ Return only the revised story text.
 Keep the story between 400 and 500 words - simplify the language, never shorten the story."""
 
 
-def revise_story(brief: dict, story: str, revision_notes: list) -> str:
-    """One rewrite pass: story + judge notes in, improved story out."""
+def revise_story(brief: dict, story: str, revision_notes: list,
+                 mode: str = "sleepy") -> str:
+    """One rewrite pass: story + notes in, improved story out (mode-aware)."""
     notes = "\n".join(f"- {n}" for n in revision_notes)
     prompt = (
         f"ORIGINAL BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         f"CURRENT STORY:\n{story}\n\n"
         f"REVISION NOTES:\n{notes}\n\n"
+        f"{STORY_MODES.get(mode, STORY_MODES['sleepy'])}\n\n"
         f"Rewrite the story now."
     )
     return call_model(prompt, system=REVISER_SYSTEM, temperature=0.7,
@@ -239,7 +252,7 @@ def draft_quality(judgment: dict) -> tuple:
         return (0, 0)
     return (min(scores.values()), sum(scores.values()))
 
-def create_story(user_request: str, verbose: bool = True) -> dict:
+def create_story(user_request: str, mode: str = "sleepy", verbose: bool = True) -> dict:
     """Full pipeline: request -> brief -> draft -> judge -> revise (<=2x).
 
     Returns a dict with the final story plus the full history for transparency:
@@ -253,7 +266,7 @@ def create_story(user_request: str, verbose: bool = True) -> dict:
         log("(Gently adjusted: " + "; ".join(brief["adjustments"]) + ")")
 
     log("Writing your story...")
-    story = generate_story(brief)
+    story = generate_story(brief, mode)
     history = []
     best_story, best_judgment = None, None
 
@@ -269,21 +282,52 @@ def create_story(user_request: str, verbose: bool = True) -> dict:
             break  # cap reached: ship the best draft seen, not the last one
         log("Making it even better...")
         story = revise_story(brief, story,
-                             judgment.get("revision_notes", []))
+                             judgment.get("revision_notes", []), mode)
 
     return {"story": best_story, "brief": brief, "history": history,
-            "revisions_used": len(history) - 1}
+            "revisions_used": len(history) - 1, "mode": mode}
+    
+def apply_user_feedback(brief: dict, story: str, feedback: str,
+                        mode: str = "sleepy") -> str:
+    """Route the child's change request through the reviser, then re-judge.
+
+    User feedback is treated like judge notes - same reviser, different
+    source. The judge still checks the result so a request like 'make it
+    scarier' cannot push the story out of the safe zone.
+    """
+    revised = revise_story(brief, story, [f"The listener asked: {feedback}"],
+                           mode)
+    judgment = judge_story(brief, revised)
+    if needs_revision(judgment):
+        revised = revise_story(brief, revised,
+                               judgment.get("revision_notes", []), mode)
+    return revised
+
 
 def main():
     user_input = input("What kind of story do you want to hear? ")
-    result = create_story(user_input)
+    mode_answer = input("Is this for winding down to sleep? (yes/no) ").strip().lower()
+    mode = "sleepy" if mode_answer in ("y", "yes", "") else "storytime"
+
+    result = create_story(user_input, mode=mode)
+    story = result["story"]
     print("\n" + "=" * 60 + "\n")
-    print(result["story"])
+    print(story)
     print("\n" + "=" * 60)
-    print(f"\nRevisions used: {result['revisions_used']}")
-    for i, entry in enumerate(result["history"]):
-        scores = entry["judgment"].get("scores", {})
-        print(f"Round {i + 1} scores: {scores}")
+
+    while True:
+        feedback = input(
+            "\nWould you like to change anything about the story? "
+            "(describe it, or press Enter to finish) ").strip()
+        if not feedback:
+            print("\nSweet dreams!")
+            break
+        print("\nUpdating your story...\n")
+        story = apply_user_feedback(result["brief"], story, feedback,
+                                    result["mode"])
+        print("=" * 60 + "\n")
+        print(story)
+        print("\n" + "=" * 60)
 
 
 if __name__ == "__main__":
