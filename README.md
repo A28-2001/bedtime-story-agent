@@ -95,6 +95,14 @@ probabilistic and occasionally leak; layer 3 exists to catch what they miss.
 - Judge scores wobble by roughly a point run to run even at temperature 0.1;
   the control logic is designed around that noise rather than pretending it
   away.
+- The interpreter sometimes over-softens: safe-but-adventurous elements (a
+  sea voyage) can be rewritten away entirely, trading request fidelity for
+  caution. It fails in the safe direction, but a production version would
+  soften how events happen rather than whether they happen.
+- No rubric dimension scores fidelity to the original request, so premise
+  drift (a hedgehog who "can't sleep" becoming a hedgehog who watches a
+  rainbow) passes the judge. Adding a "request_fidelity" dimension is the
+  natural fix.
 
 ## Cost
 
